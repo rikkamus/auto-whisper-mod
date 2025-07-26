@@ -3,20 +3,22 @@ package com.rikkamus.autowhisper;
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import com.mojang.logging.LogUtils;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.player.AbstractClientPlayer;
+import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
 import net.neoforged.bus.api.EventPriority;
+import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.client.event.ClientChatEvent;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.RegisterClientCommandsEvent;
+import net.neoforged.neoforge.common.NeoForge;
 import org.slf4j.Logger;
 
-import com.mojang.logging.LogUtils;
-
-import net.neoforged.fml.common.Mod;
-import net.neoforged.neoforge.common.NeoForge;
+import java.util.Optional;
 
 @Mod(AutoWhisperMod.MOD_ID)
 public class AutoWhisperMod {
@@ -53,10 +55,22 @@ public class AutoWhisperMod {
     }
 
     private int onAutoWhisperCommand(CommandContext<CommandSourceStack> context) {
-        // Turn off automatic whispering
-        this.targetPlayerName = null;
-        showStatusMessage();
+        if (this.targetPlayerName != null) {
+            // Turn off automatic whispering
+            this.targetPlayerName = null;
+        } else {
+            // Try to turn on automatic whispering and set target to nearest player
+            Optional<String> nearestPlayer = getNameOfNearestPlayer();
 
+            if (nearestPlayer.isEmpty()) {
+                Minecraft.getInstance().gui.getChat().addMessage(Component.literal("§cNo players found."));
+                return 0;
+            }
+
+            this.targetPlayerName = nearestPlayer.get();
+        }
+
+        showStatusMessage();
         return Command.SINGLE_SUCCESS;
     }
 
@@ -66,6 +80,26 @@ public class AutoWhisperMod {
         showStatusMessage();
 
         return Command.SINGLE_SUCCESS;
+    }
+
+    private Optional<String> getNameOfNearestPlayer() {
+        final LocalPlayer localPlayer = Minecraft.getInstance().player;
+
+        AbstractClientPlayer nearestPlayer = null;
+        double minDistance = 0;
+
+        for (AbstractClientPlayer player : localPlayer.clientLevel.players()) {
+            if (localPlayer.equals(player)) continue;
+
+            double distance = player.position().distanceTo(localPlayer.position());
+
+            if (nearestPlayer == null || distance < minDistance) {
+                nearestPlayer = player;
+                minDistance = distance;
+            }
+        }
+
+        return Optional.ofNullable(nearestPlayer).map(player -> player.getGameProfile().getName());
     }
 
     private void showStatusMessage() {
